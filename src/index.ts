@@ -15,8 +15,9 @@ export {
 
 const getPaginationQuery = (pagination: Pagination) => {
   return {
-    page: pagination.page,
+    page: 5,
     page_size: pagination.perPage,
+    paginate: true
   };
 };
 
