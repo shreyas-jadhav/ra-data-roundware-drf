@@ -6,6 +6,10 @@ import {
   Filter,
   fetchUtils,
   DataProvider,
+  GetListParams,
+  GetListResult,
+  GetManyReferenceParams,
+  GetManyReferenceResult,
 } from 'ra-core';
 
 export {
@@ -36,34 +40,49 @@ export const getOrderingQuery = (sort: Sort) => {
   };
 };
 
+export interface CustomDataProvider extends DataProvider {
+  getList: (resource: string, params: GetListParams, paginate?: boolean) => Promise<GetListResult>;
+  getManyReference: (resource: string, params: GetManyReferenceParams, paginate?: boolean) => Promise<GetManyReferenceResult>;
+}
+
 export default (
-  apiUrl: String,
-  httpClient: Function = fetchUtils.fetchJson
-): DataProvider => {
-  const getOneJson = (resource: String, id: Identifier) =>
-    httpClient(`${apiUrl}/${resource}/${id}/`).then(
+  apiUrl: string,
+  httpClient: Function = fetchUtils.fetchJson,
+  paginateAllByDefault: boolean = false
+): CustomDataProvider => {
+  
+  const getOneJson = (resource: string, id: Identifier, filterQuery: Filter = { }) =>
+    httpClient(`${apiUrl}/${resource}/${id}/?${stringify(getFilterQuery(filterQuery))}`).then(
       (response: Response) => response.json
     );
 
   return {
-    getList: async (resource, params) => {
-      const query = {
+    getList: async (resource, params, paginate: boolean = paginateAllByDefault) => {
+      if ([`assets`].includes(resource)) paginate = true;
+      let query = {
         ...getFilterQuery(params.filter),
-        ...getPaginationQuery(params.pagination),
         ...getOrderingQuery(params.sort),
+        ...(paginate && getPaginationQuery(params.pagination))
       };
+      
       const url = `${apiUrl}/${resource}/?${stringify(query)}`;
 
       const { json } = await httpClient(url);
 
       return {
-        data: json.results,
-        total: json.count,
+        data: paginate ? json.results  : json,
+        total: paginate ? json.count : json.length,
       };
     },
 
-    getOne: async (resource, params) => {
-      const data = await getOneJson(resource, params.id);
+    getOne: async (resource, { id, ...query }) => {
+
+      // resources which require session_id
+      if ([`projects`].includes(resource)) query = {
+        ...query,
+        session_id: 1
+      }
+      const data = await getOneJson(resource, id, query);
       return {
         data,
       };
@@ -75,19 +94,20 @@ export default (
       ).then(data => ({ data }));
     },
 
-    getManyReference: async (resource, params) => {
-      const query = {
+    getManyReference: async (resource, params, paginate: boolean = paginateAllByDefault) => {
+      let query = {
         ...getFilterQuery(params.filter),
-        ...getPaginationQuery(params.pagination),
+        ...(paginate && getPaginationQuery(params.pagination)),
         ...getOrderingQuery(params.sort),
         [params.target]: params.id,
       };
+
       const url = `${apiUrl}/${resource}/?${stringify(query)}`;
 
       const { json } = await httpClient(url);
       return {
-        data: json.results,
-        total: json.count,
+        data: paginate ? json.results : json,
+        total: paginate ? json.count : json?.length,
       };
     },
 
