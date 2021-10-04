@@ -18,11 +18,6 @@
     "prepare": "tsdx build",
     "release": "standard-version -a"
   },
-  "husky": {
-    "hooks": {
-      "pre-commit": "tsdx lint"
-    }
-  },
   "keywords": [
     "react-admin",
     "react",
