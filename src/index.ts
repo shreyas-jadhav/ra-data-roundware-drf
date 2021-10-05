@@ -21,7 +21,7 @@ const getPaginationQuery = (pagination: Pagination) => {
   return {
     page: pagination.page,
     page_size: pagination.perPage,
-    paginate: true
+    paginate: true,
   };
 };
 
@@ -41,8 +41,16 @@ export const getOrderingQuery = (sort: Sort) => {
 };
 
 export interface CustomDataProvider extends DataProvider {
-  getList: (resource: string, params: GetListParams, paginate?: boolean) => Promise<GetListResult>;
-  getManyReference: (resource: string, params: GetManyReferenceParams, paginate?: boolean) => Promise<GetManyReferenceResult>;
+  getList: (
+    resource: string,
+    params: GetListParams,
+    paginate?: boolean
+  ) => Promise<GetListResult>;
+  getManyReference: (
+    resource: string,
+    params: GetManyReferenceParams,
+    paginate?: boolean
+  ) => Promise<GetManyReferenceResult>;
 }
 
 export default (
@@ -50,38 +58,46 @@ export default (
   httpClient: Function = fetchUtils.fetchJson,
   paginateAllByDefault: boolean = false
 ): CustomDataProvider => {
-  
-  const getOneJson = (resource: string, id: Identifier, filterQuery: Filter = { }) =>
-    httpClient(`${apiUrl}/${resource}/${id}/?${stringify(getFilterQuery(filterQuery))}`).then(
-      (response: Response) => response.json
-    );
+  const getOneJson = (
+    resource: string,
+    id: Identifier,
+    filterQuery: Filter = {}
+  ) => {
+    // resources which require session_id
+    if ([`projects`].includes(resource))
+      filterQuery = {
+        ...filterQuery,
+        session_id: 1,
+      };
+    return httpClient(
+      `${apiUrl}/${resource}/${id}/?${stringify(getFilterQuery(filterQuery))}`
+    ).then((response: Response) => response.json);
+  };
 
   return {
-    getList: async (resource, params, paginate: boolean = paginateAllByDefault) => {
+    getList: async (
+      resource,
+      params,
+      paginate: boolean = paginateAllByDefault
+    ) => {
       if ([`assets`].includes(resource)) paginate = true;
       let query = {
         ...getFilterQuery(params.filter),
         ...getOrderingQuery(params.sort),
-        ...(paginate && getPaginationQuery(params.pagination))
+        ...(paginate && getPaginationQuery(params.pagination)),
       };
-      
+
       const url = `${apiUrl}/${resource}/?${stringify(query)}`;
 
       const { json } = await httpClient(url);
 
       return {
-        data: paginate ? json.results  : json,
+        data: paginate ? json.results : json,
         total: paginate ? json.count : json.length,
       };
     },
 
     getOne: async (resource, { id, ...query }) => {
-
-      // resources which require session_id
-      if ([`projects`].includes(resource)) query = {
-        ...query,
-        session_id: 1
-      }
       const data = await getOneJson(resource, id, query);
       return {
         data,
@@ -94,7 +110,11 @@ export default (
       ).then(data => ({ data }));
     },
 
-    getManyReference: async (resource, params, paginate: boolean = paginateAllByDefault) => {
+    getManyReference: async (
+      resource,
+      params,
+      paginate: boolean = paginateAllByDefault
+    ) => {
       let query = {
         ...getFilterQuery(params.filter),
         ...(paginate && getPaginationQuery(params.pagination)),
