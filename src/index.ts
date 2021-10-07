@@ -58,7 +58,7 @@ export default (
   httpClient: Function = fetchUtils.fetchJson,
   paginateAllByDefault: boolean = false
 ): CustomDataProvider => {
-  const getOneJson = (
+  const getOneJson = async (
     resource: string,
     id: Identifier,
     filterQuery: Filter = {}
@@ -69,18 +69,23 @@ export default (
         ...filterQuery,
         session_id: 1,
       };
-    return httpClient(
+    
+    let results = await httpClient(
       `${apiUrl}/${resource}/${id}/?${stringify(getFilterQuery(filterQuery))}`
     ).then((response: Response) => response.json);
+
+    
+
+    return results;
   };
 
   return {
     getList: async (
       resource,
       params,
-      paginate: boolean = paginateAllByDefault
+      paginate: boolean = ([`assets`].includes(resource)) || paginateAllByDefault
     ) => {
-      if ([`assets`].includes(resource)) paginate = true;
+      
       let query = {
         ...getFilterQuery(params.filter),
         ...getOrderingQuery(params.sort),
@@ -89,7 +94,21 @@ export default (
 
       const url = `${apiUrl}/${resource}/?${stringify(query)}`;
 
-      const { json } = await httpClient(url);
+      let { json } = await httpClient(url);
+
+     
+      if ([`listenevents`].includes(resource) && "project_id" in query) {
+        const sessionsQuery = {
+          ...getFilterQuery(params.filter)
+        }
+        let { json: assets } = await httpClient(`${apiUrl}/assets/?${stringify(sessionsQuery)}`);
+        let filteredArray: unknown[] = Array.isArray(json) ? json : json.results;
+        // @ts-ignore
+        filteredArray = filteredArray.filter(r => assets.some(s => s?.id === r?.asset_id));
+        if (Array.isArray(json)) json = filteredArray
+        else json.results = filteredArray
+        console.log(`${resource} Filtered by asset_id belonging to that project, because server doesn't filter by project_id`)
+      }
 
       return {
         data: paginate ? json.results : json,
