@@ -71,6 +71,9 @@ export class RoundwareDataProvider implements DataProvider {
   apiUrl: string;
   httpClient: Function;
   paginateAllByDefault: boolean;
+
+  cachedProjectData = new Map<number, Map<string, any[]>>();
+
   constructor(
     apiUrl: string,
     httpClient: Function = fetchUtils.fetchJson,
@@ -82,6 +85,21 @@ export class RoundwareDataProvider implements DataProvider {
   }
 
 
+  
+
+  getResource(resource: string, projectId: number = 0): undefined | any[] {
+    const resources = this.cachedProjectData.get(projectId)
+    if (!resources) return;
+    return resources.get(resource);
+  }
+
+  setResourse(resource: string, data: any[], projectId: number = 0) {
+    let resources = this.cachedProjectData.get(projectId);
+    if (!resources) resources = new Map<string, any[]>();
+    resources.set(resource, data);
+    this.cachedProjectData.set(projectId, resources);
+  }
+
 
   /**
    *
@@ -89,30 +107,39 @@ export class RoundwareDataProvider implements DataProvider {
   async getList<RecordType extends Record = Record>(
     resource: string,
     params: GetListParams,
-    paginate: boolean = [`assets`].includes(resource) ||
-      this.paginateAllByDefault
   ): Promise<GetListResult<RecordType>> {
     let query = {
       ...getFilterQuery(params.filter),
       ...getOrderingQuery(params.sort),
-      ...(paginate && getPaginationQuery(params.pagination)),
-      ...(this.isEligibleForCaching(params.filter) && this.getCachingQuery(resource)),
+      // ...(paginate && getPaginationQuery(params.pagination)),
     };
 
     const url = `${this.apiUrl}/${resource}/?${stringify(query)}`;
 
     
+    let json: any[];
+    if (this.getResource(resource, params.filter.project_id)) json = this.getResource(resource, params.filter.project_id)!;
+    else {
+      console.log(`Fetching data...`, params.filter.project_id);
+      ({ json } = await this.httpClient(url))
+      json = this.normalizeApiResponse(json);
+      this.setResourse(resource, json, params.filter.project_id);
+    }
 
-    let { json } = await this.httpClient(url);
+    const total = json.length;
+    const { page, perPage } = params.pagination;
     
-    json = this.normalizeApiResponse(json)
+    if (page > 0 && perPage > 0) {
+      const start = page * perPage - perPage;
+      const end = start + perPage;
+      json = json.slice(start, end)
+      console.log(`Paginated`, page, perPage)
+    }
+
     
-
-    this.isEligibleForCaching(params.filter) && (json = this.mergeWithCachedData<RecordType>(resource, json));
-
     return {
       data: json,
-      total: json.length,
+      total: total,
     };
   }
 
@@ -120,67 +147,10 @@ export class RoundwareDataProvider implements DataProvider {
     return Array.isArray(data) ? data : data.results
   }
 
-  // if there is already a time filter then it should not be cached
-  isEligibleForCaching(filter: FilterPayload) {
-    return false // temporarily disabling caching
-    let eligible = true;
-    [`created__gte`, `created__lte`, `start_time__gte`, `start_time__lte`].forEach((k) => {
-      if (k in filter) eligible = false;
-    })
-    return eligible
-  }
-
-  
-  cachedResources = new Map<string, { lastFetched: Date, data: any[] }>();
-  getCachingQuery(resource: string) {
-    const cachedResource = this.cachedResources.get(resource);
-    if (!cachedResource) return {};
-    let query = {};
-
-    switch (resource) {
-      case `assets`:
-        query = {
-          created__gte: cachedResource.lastFetched.toISOString()
-        }
-        break;
-    
-      case `listenevents`:
-        query = {
-          start_time__gte: cachedResource.lastFetched.toISOString()
-        }
-        break;
-      default:
-        break;
-    }
-    return query;
-  };
-
-  mergeWithCachedData<RecordType extends Record>(resource: string, data: any[]): GetListResult<RecordType>["data"] {
-
-    if (![`assets`, `listenevents`].includes(resource)) return data;
-    const cachedResource = this.cachedResources.get(resource);
-
-    if (!cachedResource) {
-      this.cachedResources.set(resource, {
-        lastFetched: new Date(),
-        data,
-      })
-      return data;
-    }
-    const newData = cachedResource.data.concat(data);
-    console.info(`used cached data for ${resource}`);
-    this.cachedResources.set(resource, {
-      lastFetched: new Date(),
-      data: newData
-    })
-    return newData;
-  }
-
-
   async getOne<RecordType extends Record>(
     resource: string,
     { id, ...query }: GetOneParams
-  ): Promise<GetOneResult<RecordType>> {
+  ): Promise<GetOneResult<RecordType>> {    
     const data = await this.getOneJson(resource, id, query);
     return {
       data,
@@ -269,6 +239,9 @@ export class RoundwareDataProvider implements DataProvider {
     id: Identifier,
     filterQuery: FilterPayload = {}
   ) => {
+    if (this.getResource(resource, filterQuery.project_id)?.some(d => d.id == id)) {
+      return this.getResource(resource, filterQuery.project_id)?.find(d => d.id == id)
+    }
     // resources which require session_id
     if ([`projects`].includes(resource))
       filterQuery = {
@@ -281,7 +254,7 @@ export class RoundwareDataProvider implements DataProvider {
         getFilterQuery(filterQuery)
       )}`
     ).then((response: Response) => response.json);
-
+    this.setResourse(resource, [...(this.getResource(resource, filterQuery.project_id) || []), results], filterQuery.project_id)
     return results;
   };
 }
