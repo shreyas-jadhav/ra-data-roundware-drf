@@ -69,7 +69,7 @@ export class RoundwareDataProvider implements DataProvider {
   paginateAllByDefault: boolean;
 
   cachedProjectData = new Map<number, Map<string, any[]>>();
-
+  currentProjectId: number = 0;
   constructor(
     apiUrl: string,
     httpClient: Function = fetchUtils.fetchJson,
@@ -80,13 +80,21 @@ export class RoundwareDataProvider implements DataProvider {
     this.paginateAllByDefault = paginateAllByDefault;
   }
 
-  getResource(resource: string, projectId: number = 0): undefined | any[] {
+  getResource(
+    resource: string,
+    projectId: number = this.currentProjectId
+  ): undefined | any[] {
     const resources = this.cachedProjectData.get(projectId);
+
     if (!resources) return;
     return resources.get(resource);
   }
 
-  setResourse(resource: string, data: any[], projectId: number = 0) {
+  setResourse(
+    resource: string,
+    data: any[],
+    projectId: number = this.currentProjectId
+  ) {
     let resources = this.cachedProjectData.get(projectId);
     if (!resources) resources = new Map<string, any[]>();
     resources.set(resource, data);
@@ -101,11 +109,14 @@ export class RoundwareDataProvider implements DataProvider {
     params: GetListParams
   ): Promise<GetListResult<RecordType>> {
     const { project_id, session_id, ...filters } = params.filter;
+    console.info(`getList`, resource, project_id);
     let query = {
       ...getFilterQuery({
         project_id,
         session_id,
-        ...(filters.start_time__gte && { start_time__gte: filters.start_time__gte})
+        ...(filters.start_time__gte && {
+          start_time__gte: filters.start_time__gte,
+        }),
       }),
       ...getOrderingQuery(params.sort),
       // ...(paginate && getPaginationQuery(params.pagination)),
@@ -115,9 +126,11 @@ export class RoundwareDataProvider implements DataProvider {
 
     let json: any[];
     if (this.getResource(resource, params.filter.project_id)) {
-      json = this.getResource(resource, params.filter.project_id)!;
+      json = [
+        ...this.getResource(resource, params.filter.project_id)!,
+      ].sort((a, b) => (a.id > b.id ? 1 : -1));
     } else {
-      console.log(`Fetching data...`, params.filter.project_id);
+      console.info(`Fetching data...`, params.filter.project_id);
       ({ json } = await this.httpClient(url));
       json = this.normalizeApiResponse(json);
       this.setResourse(resource, json, params.filter.project_id);
@@ -125,36 +138,57 @@ export class RoundwareDataProvider implements DataProvider {
 
     if (Object.keys(filters).length > 0) {
       Object.keys(filters).forEach(filter => {
-        console.log(`Filtering by ${filter}`)
-        const start_time_key = resource == `sessions` ? `starttime` : `start_time`
+        console.info(`Filtering by ${filter}`);
+        const start_time_key =
+          resource == `sessions` ? `starttime` : `start_time`;
         switch (filter) {
           case `start_time__gte`:
-            json = json.filter(d => new Date(d[start_time_key]) > new Date(filters[filter]))
+            json = json.filter(
+              d => new Date(d[start_time_key]) > new Date(filters[filter])
+            );
             break;
           case `start_time__lte`:
-            json = json.filter(d => new Date(d[start_time_key]) < new Date(filters[filter]))
+            json = json.filter(
+              d => new Date(d[start_time_key]) < new Date(filters[filter])
+            );
             break;
           case `created__gte`:
-            json = json.filter(d => new Date(d.created) > new Date(filters[filter]))
+            json = json.filter(
+              d => new Date(d.created) > new Date(filters[filter])
+            );
             break;
           case `created__lte`:
-            json = json.filter(d => new Date(d.created) < new Date(filters[filter]))
+            json = json.filter(
+              d => new Date(d.created) < new Date(filters[filter])
+            );
             break;
           default:
             json = json.filter(d => d[filter] == filters[filter]);
             break;
         }
-      })
+      });
     }
 
     const total = json.length;
     const { page, perPage } = params.pagination;
 
+    if (params?.sort?.field) {
+      const { field, order } = params.sort;
+      json = json.sort((a, b) => {
+        let bool = false;
+        if (order == 'ASC') {
+          a[field] > b[field] ? (bool = true) : (bool = false);
+        } else a[field] > b[field] ? (bool = false) : (bool = true);
+        if (bool) return 1;
+        return -1;
+      });
+      console.log(`Sorted`);
+    }
     if (page > 0 && perPage > 0) {
       const start = page * perPage - perPage;
       const end = start + perPage;
       json = json.slice(start, end);
-      console.log(`Paginated`, page, perPage);
+      console.info(`Paginated`, page, perPage);
     }
 
     return {
@@ -171,6 +205,7 @@ export class RoundwareDataProvider implements DataProvider {
     resource: string,
     { id, ...query }: GetOneParams
   ): Promise<GetOneResult<RecordType>> {
+    console.info(`getOne`, resource, query);
     const data = await this.getOneJson(resource, id, query);
     return {
       data,
@@ -180,6 +215,7 @@ export class RoundwareDataProvider implements DataProvider {
     resource: string,
     params: GetManyParams
   ): Promise<GetManyResult<RecordType>> {
+    console.info(`getMany`, resource, params);
     return Promise.all(
       params.ids.map(id => this.getOneJson(resource, id))
     ).then(data => ({ data }));
@@ -189,6 +225,7 @@ export class RoundwareDataProvider implements DataProvider {
     params: GetManyReferenceParams,
     paginate: boolean = false
   ): Promise<GetManyReferenceResult<RecordType>> {
+    console.info(`getManyReference`, resource, params);
     let query = {
       ...getFilterQuery(params.filter),
       ...(paginate && getPaginationQuery(params.pagination)),
@@ -208,13 +245,36 @@ export class RoundwareDataProvider implements DataProvider {
     resource: string,
     params: UpdateParams
   ): Promise<UpdateResult<RecordType>> {
+    console.info(`update`, resource, params);
+    const needsFormData = Object.values(params?.data)?.some(
+      v => v instanceof File || v instanceof Blob
+    );
+
+    if (needsFormData) {
+      params.data = this.getFormData(params.data);
+    }
     const { json } = await this.httpClient(
       `${this.apiUrl}/${resource}/${params.id}/`,
       {
         method: 'PATCH',
-        body: JSON.stringify(params.data),
+        body:
+          params.data instanceof FormData
+            ? params.data
+            : JSON.stringify(params.data),
+        ...(needsFormData && {
+          headers: new Headers({}),
+        }),
       }
     );
+    console.log(this.currentProjectId, json);
+    const newList = this.getResource(resource, this.currentProjectId)?.filter(
+      r => r.id != params.id
+    );
+    if (Array.isArray(newList)) {
+      newList.push(json);
+      this.setResourse(resource, newList, this.currentProjectId);
+      console.info(`updated #${params.id} into ${resource}`);
+    } else this.setResourse(resource, [json], this.currentProjectId);
     return { data: json };
   }
   async updateMany(
@@ -234,10 +294,26 @@ export class RoundwareDataProvider implements DataProvider {
     resource: string,
     params: CreateParams
   ): Promise<CreateResult<RecordType>> {
+    const needsFormData = Object.values(params?.data)?.some(
+      v => v instanceof File || v instanceof Blob
+    );
+    if (needsFormData) {
+      params.data = this.getFormData(params.data);
+    }
     const { json } = await this.httpClient(`${this.apiUrl}/${resource}/`, {
       method: 'POST',
-      body: JSON.stringify(params.data),
+      body:
+        params.data instanceof FormData
+          ? params.data
+          : JSON.stringify(params.data),
+      ...(needsFormData && {
+        headers: new Headers({}),
+      }),
     });
+
+    const resourseList = this.getResource(resource, this.currentProjectId);
+    if (Array.isArray(resourseList)) resourseList?.push(json);
+    else this.setResourse(resource, [json], this.currentProjectId);
     return {
       data: { ...json },
     };
@@ -246,9 +322,15 @@ export class RoundwareDataProvider implements DataProvider {
     resource: string,
     params: DeleteParams
   ): Promise<DeleteResult<RecordType>> {
+    console.info(`delete`, resource, params);
     return this.httpClient(`${this.apiUrl}/${resource}/${params.id}/`, {
       method: 'DELETE',
-    }).then(() => ({ data: params.previousData }));
+    }).then(() => {
+      let list = this.getResource(resource, this.currentProjectId);
+      list = list?.filter(r => r.id != params.id);
+      this.setResourse(resource, list || [], this.currentProjectId);
+      return { data: params.previousData };
+    });
   }
   async deleteMany(
     resource: string,
@@ -260,7 +342,12 @@ export class RoundwareDataProvider implements DataProvider {
           method: 'DELETE',
         })
       )
-    ).then(responses => ({ data: responses.map(({ json }) => json.id) }));
+    ).then(responses => {
+      let list = this.getResource(resource);
+      list = list?.filter(r => params.ids.includes(r.id));
+      this.setResourse(resource, list || [], this.currentProjectId);
+      return { data: responses.map(({ json }) => json.id) };
+    });
   }
 
   getOneJson = async (
@@ -287,11 +374,67 @@ export class RoundwareDataProvider implements DataProvider {
         getFilterQuery(filterQuery)
       )}`
     ).then((response: Response) => response.json);
-    this.setResourse(
-      resource,
-      [...(this.getResource(resource, filterQuery.project_id) || []), results],
-      filterQuery.project_id
-    );
+
+    const resourceArray = this.getResource(resource, this.currentProjectId);
+    if (
+      Array.isArray(resourceArray) &&
+      !resourceArray.some(r => r.id == results.id)
+    ) {
+      console.info(`added #${results.id} to cached ${resource}`);
+      resourceArray.push(results);
+      resourceArray.sort((a, b) => (a.id > b.id ? 1 : -1));
+    } else this.setResourse(resource, [results], this.currentProjectId);
+
     return results;
   };
+
+  getFormData(object: Object) {
+    return this.objectToFormData(object);
+  }
+
+  objectToFormData(obj: Object, rootName?: string, ignoreList?: string[]) {
+    var formData = new FormData();
+
+    function appendFormData(data: Object, root: string = '') {
+      if (!ignore(root)) {
+        root = root || '';
+        if (data instanceof File) {
+          formData.append(root, data);
+        } else if (Array.isArray(data)) {
+          for (var i = 0; i < data.length; i++) {
+            appendFormData(data[i], root + '[' + i + ']');
+          }
+        } else if (typeof data === 'object' && data) {
+          for (var key in data) {
+            if (data.hasOwnProperty(key)) {
+              if (root === '') {
+                // @ts-ignore
+                appendFormData(data[key], key);
+              } else {
+                // @ts-ignore
+                appendFormData(data[key], root + '.' + key);
+              }
+            }
+          }
+        } else {
+          if (data !== null && typeof data !== 'undefined') {
+            formData.append(root, data);
+          }
+        }
+      }
+    }
+
+    function ignore(root: string) {
+      return (
+        Array.isArray(ignoreList) &&
+        ignoreList.some(function(x) {
+          return x === root;
+        })
+      );
+    }
+
+    appendFormData(obj, rootName);
+
+    return formData;
+  }
 }
