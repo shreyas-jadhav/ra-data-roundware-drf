@@ -112,7 +112,7 @@ export class RoundwareDataProvider implements DataProvider {
     
     let query = {
       ...getFilterQuery({
-        project_id,
+        project_id: project_id || this.currentProjectId,
         session_id,
         ...(filters.start_time__gte && {
           start_time__gte: filters.start_time__gte,
