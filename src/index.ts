@@ -109,7 +109,7 @@ export class RoundwareDataProvider implements DataProvider {
     params: GetListParams
   ): Promise<GetListResult<RecordType>> {
     const { project_id, session_id, ...filters } = params.filter;
-    console.info(`getList`, resource, project_id);
+    
     let query = {
       ...getFilterQuery({
         project_id,
@@ -130,7 +130,7 @@ export class RoundwareDataProvider implements DataProvider {
         ...this.getResource(resource, params.filter.project_id)!,
       ].sort((a, b) => (a.id > b.id ? 1 : -1));
     } else {
-      console.info(`Fetching data...`, params.filter.project_id);
+      
       ({ json } = await this.httpClient(url));
       json = this.normalizeApiResponse(json);
       this.setResourse(resource, json, params.filter.project_id);
@@ -138,7 +138,7 @@ export class RoundwareDataProvider implements DataProvider {
 
     if (Object.keys(filters).length > 0) {
       Object.keys(filters).forEach(filter => {
-        console.info(`Filtering by ${filter}`);
+        
         const start_time_key =
           resource == `sessions` ? `starttime` : `start_time`;
         switch (filter) {
@@ -182,13 +182,13 @@ export class RoundwareDataProvider implements DataProvider {
         if (bool) return 1;
         return -1;
       });
-      console.log(`Sorted`);
+      
     }
     if (page > 0 && perPage > 0) {
       const start = page * perPage - perPage;
       const end = start + perPage;
       json = json.slice(start, end);
-      console.info(`Paginated`, page, perPage);
+      
     }
 
     return {
@@ -205,7 +205,7 @@ export class RoundwareDataProvider implements DataProvider {
     resource: string,
     { id, ...query }: GetOneParams
   ): Promise<GetOneResult<RecordType>> {
-    console.info(`getOne`, resource, query);
+    
     const data = await this.getOneJson(resource, id, query);
     return {
       data,
@@ -215,7 +215,7 @@ export class RoundwareDataProvider implements DataProvider {
     resource: string,
     params: GetManyParams
   ): Promise<GetManyResult<RecordType>> {
-    console.info(`getMany`, resource, params);
+    
     return Promise.all(
       params.ids.map(id => this.getOneJson(resource, id))
     ).then(data => ({ data }));
@@ -225,7 +225,7 @@ export class RoundwareDataProvider implements DataProvider {
     params: GetManyReferenceParams,
     paginate: boolean = false
   ): Promise<GetManyReferenceResult<RecordType>> {
-    console.info(`getManyReference`, resource, params);
+    
     let query = {
       ...getFilterQuery(params.filter),
       ...(paginate && getPaginationQuery(params.pagination)),
@@ -245,7 +245,7 @@ export class RoundwareDataProvider implements DataProvider {
     resource: string,
     params: UpdateParams
   ): Promise<UpdateResult<RecordType>> {
-    console.info(`update`, resource, params);
+    
     const needsFormData = Object.values(params?.data)?.some(
       v => v instanceof File || v instanceof Blob
     );
@@ -266,14 +266,14 @@ export class RoundwareDataProvider implements DataProvider {
         }),
       }
     );
-    console.log(this.currentProjectId, json);
+    
     const newList = this.getResource(resource, this.currentProjectId)?.filter(
       r => r.id != params.id
     );
     if (Array.isArray(newList)) {
       newList.push(json);
       this.setResourse(resource, newList, this.currentProjectId);
-      console.info(`updated #${params.id} into ${resource}`);
+      
     } else this.setResourse(resource, [json], this.currentProjectId);
     return { data: json };
   }
@@ -322,7 +322,7 @@ export class RoundwareDataProvider implements DataProvider {
     resource: string,
     params: DeleteParams
   ): Promise<DeleteResult<RecordType>> {
-    console.info(`delete`, resource, params);
+    
     return this.httpClient(`${this.apiUrl}/${resource}/${params.id}/`, {
       method: 'DELETE',
     }).then(() => {
@@ -380,7 +380,7 @@ export class RoundwareDataProvider implements DataProvider {
       Array.isArray(resourceArray) &&
       !resourceArray.some(r => r.id == results.id)
     ) {
-      console.info(`added #${results.id} to cached ${resource}`);
+      
       resourceArray.push(results);
       resourceArray.sort((a, b) => (a.id > b.id ? 1 : -1));
     } else this.setResourse(resource, [results], this.currentProjectId);
@@ -402,7 +402,7 @@ export class RoundwareDataProvider implements DataProvider {
           formData.append(root, data);
         } else if (Array.isArray(data)) {
           for (var i = 0; i < data.length; i++) {
-            appendFormData(data[i], root + '[' + i + ']');
+            appendFormData(data[i] + ',', root);
           }
         } else if (typeof data === 'object' && data) {
           for (var key in data) {
