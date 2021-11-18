@@ -114,6 +114,7 @@ export class RoundwareDataProvider implements DataProvider {
       ...getFilterQuery({
         project_id: project_id || this.currentProjectId,
         session_id,
+        admin: 1,
         ...(filters.start_time__gte && {
           start_time__gte: filters.start_time__gte,
         }),
