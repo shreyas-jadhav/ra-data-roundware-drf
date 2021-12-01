@@ -407,12 +407,12 @@ export class RoundwareDataProvider implements DataProvider {
       );
     }
     // resources which require session_id
-    if ([`projects`].includes(resource))
+    if ([`projects`].includes(resource)) {
       filterQuery = {
         ...filterQuery,
         session_id: 1,
       };
-
+}
     let results = await this.httpClient(
       `${this.apiUrl}/${resource}/${id}/?${stringify(
         getFilterQuery(filterQuery)
@@ -420,13 +420,20 @@ export class RoundwareDataProvider implements DataProvider {
     ).then((response: Response) => response.json);
 
     const resourceArray = this.getResource(resource, this.currentProjectId);
-    if (
-      Array.isArray(resourceArray) &&
-      !resourceArray.some(r => r.id == results.id)
-    ) {
-      resourceArray.push(results);
-      resourceArray.sort((a, b) => (a.id > b.id ? 1 : -1));
-    } else this.setResourse(resource, [results], this.currentProjectId);
+
+    if (!resourceArray?.length) {
+      this.getList(resource, {
+        filter: {},
+        pagination: {
+          page: 0,
+          perPage: 0,
+        },
+        sort: {
+          field: 'id',
+          order: "ASC"
+        }
+      }, true)
+    }
 
     return results;
   };

@@ -5992,6 +5992,13 @@
     "query-string" "^5.1.1"
     "reselect" "~3.0.0"
 
+"ra-data-roundware-drf@https://github.com/shreyas-jadhav/ra-data-roundware-drf/raw/main/ra-data-roundware-drf-0.1.6.tgz":
+  "integrity" "sha512-MNLt3J+ORfVW+fNmLfG9LPzKFahC5mIxUqMj93UF9SLq0embZaTIqsEm9TuKf3LGUGBGkb50oKfs5Ont8f6viA=="
+  "resolved" "https://github.com/shreyas-jadhav/ra-data-roundware-drf/raw/main/ra-data-roundware-drf-0.1.6.tgz"
+  "version" "0.1.6"
+  dependencies:
+    "query-string" "^7.0.1"
+
 "ra-i18n-polyglot@^3.18.3":
   "integrity" "sha512-nUMtFguhMzy6iYw1MlKcVYkTFHces/tEhEgOi6SAGsBgcQ652g7G0UDVdJh6kWDYUiu4UvoREfmZhIorihuoDA=="
   "resolved" "https://registry.npmjs.org/ra-i18n-polyglot/-/ra-i18n-polyglot-3.18.3.tgz"
