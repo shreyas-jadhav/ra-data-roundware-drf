@@ -432,7 +432,12 @@ export class RoundwareDataProvider implements DataProvider {
           field: 'id',
           order: "ASC"
         }
-      }, true)
+      })
+    } else if (
+      !resourceArray.some(r => r.id == results.id)
+    ) {
+      resourceArray.push(results);
+      resourceArray.sort((a, b) => (a.id > b.id ? 1 : -1));
     }
 
     return results;
