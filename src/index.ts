@@ -70,6 +70,9 @@ export class RoundwareDataProvider implements DataProvider {
 
   cachedProjectData = new Map<number, Map<string, any[]>>();
   currentProjectId: number = 0;
+
+  revalidatingResources: string[] = []
+
   constructor(
     apiUrl: string,
     httpClient: Function = fetchUtils.fetchJson,
@@ -79,6 +82,8 @@ export class RoundwareDataProvider implements DataProvider {
     this.httpClient = httpClient;
     this.paginateAllByDefault = paginateAllByDefault;
   }
+
+  
 
   getResource(
     resource: string,
@@ -106,7 +111,9 @@ export class RoundwareDataProvider implements DataProvider {
    */
   async getList<RecordType extends Record = Record>(
     resource: string,
-    params: GetListParams
+    params: GetListParams,
+    /** revalidates cache */
+    revalidate = false
   ): Promise<GetListResult<RecordType>> {
     const { project_id, session_id, ...filters } = params.filter;
     
@@ -126,15 +133,16 @@ export class RoundwareDataProvider implements DataProvider {
     const url = `${this.apiUrl}/${resource}/?${stringify(query)}`;
 
     let json: any[];
-    if (this.getResource(resource, params.filter.project_id)) {
+    if (this.getResource(resource, params.filter.project_id) || !revalidate || (revalidate && this.revalidatingResources.includes(resource))) {
       json = [
         ...this.getResource(resource, params.filter.project_id)!,
       ].sort((a, b) => (a.id > b.id ? 1 : -1));
     } else {
-      
+      this.revalidatingResources.push(resource);
       ({ json } = await this.httpClient(url));
       json = this.normalizeApiResponse(json);
       this.setResourse(resource, json, params.filter.project_id);
+      this.revalidatingResources = this.revalidatingResources.filter(r => r !== resource);
     }
 
     if (Object.keys(filters).length > 0) {
@@ -254,7 +262,7 @@ export class RoundwareDataProvider implements DataProvider {
     if (needsFormData) {
       params.data = this.getFormData(params.data);
     }
-    const { json } = await this.httpClient(
+    await this.httpClient(
       `${this.apiUrl}/${resource}/${params.id}/`,
       {
         method: 'PATCH',
@@ -267,16 +275,29 @@ export class RoundwareDataProvider implements DataProvider {
         }),
       }
     );
+
+    const newData = await this.getOneJson(resource, params.id)
     
     const newList = this.getResource(resource, this.currentProjectId)?.filter(
       r => r.id != params.id
     );
     if (Array.isArray(newList)) {
-      newList.push(json);
+      newList.push(newData);
       this.setResourse(resource, newList, this.currentProjectId);
-      
-    } else this.setResourse(resource, [json], this.currentProjectId);
-    return { data: json };
+    } else {
+      this.getList(resource, {
+        filter: {},
+        sort: {
+          field: 'id',
+          order: 'ASC'
+        },
+        pagination: {
+          page: 0,
+          perPage: 0
+        }
+      }, true);
+    }
+    return { data: newData };
   }
   async updateMany(
     resource: string,
@@ -314,7 +335,20 @@ export class RoundwareDataProvider implements DataProvider {
 
     const resourseList = this.getResource(resource, this.currentProjectId);
     if (Array.isArray(resourseList)) resourseList?.push(json);
-    else this.setResourse(resource, [json], this.currentProjectId);
+    else {
+      this.getList(resource, {
+        filter: {
+        },
+        sort: {
+          field: 'id',
+          order: 'ASC'
+        },
+        pagination: {
+          page: 0,
+          perPage: 0
+        }
+      }, true)
+    }
     return {
       data: { ...json },
     };
@@ -345,8 +379,10 @@ export class RoundwareDataProvider implements DataProvider {
       )
     ).then(responses => {
       let list = this.getResource(resource);
+      if (Array.isArray(list)) { 
       list = list?.filter(r => params.ids.includes(r.id));
-      this.setResourse(resource, list || [], this.currentProjectId);
+        this.setResourse(resource, list || [], this.currentProjectId);
+        }
       return { data: responses.map(({ json }) => json.id) };
     });
   }
