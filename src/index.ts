@@ -81,6 +81,7 @@ export class RoundwareDataProvider implements DataProvider {
     this.apiUrl = apiUrl;
     this.httpClient = httpClient;
     this.paginateAllByDefault = paginateAllByDefault;
+    console.debug(`Data Provider created`)
   }
 
   getResource(
@@ -114,7 +115,7 @@ export class RoundwareDataProvider implements DataProvider {
     revalidate = false
   ): Promise<GetListResult<RecordType>> {
     const { project_id, session_id, ...filters } = params.filter;
-
+console.debug(`getList`)
     let query = {
       ...getFilterQuery({
         project_id: project_id || this.currentProjectId,
@@ -231,6 +232,7 @@ export class RoundwareDataProvider implements DataProvider {
     resource: string,
     params: GetManyParams
   ): Promise<GetManyResult<RecordType>> {
+    console.debug(`getMany`, resource)
     return Promise.all(
       params.ids.map(id => this.getOneJson(resource, id))
     ).then(data => ({ data }));
@@ -240,6 +242,7 @@ export class RoundwareDataProvider implements DataProvider {
     params: GetManyReferenceParams,
     paginate: boolean = false
   ): Promise<GetManyReferenceResult<RecordType>> {
+    console.debug(`getManyReferene`, resource)
     let query = {
       ...getFilterQuery(params.filter),
       ...(paginate && getPaginationQuery(params.pagination)),
@@ -259,6 +262,9 @@ export class RoundwareDataProvider implements DataProvider {
     resource: string,
     params: UpdateParams
   ): Promise<UpdateResult<RecordType>> {
+
+    console.debug(`update`, resource)
+
     const needsFormData = Object.values(params?.data)?.some(
       v => v instanceof File || v instanceof Blob
     );
@@ -277,7 +283,7 @@ export class RoundwareDataProvider implements DataProvider {
       }),
     });
 
-    const newData = await this.getOneJson(resource, params.id);
+    const newData = await this.getOneJson(resource, params.id, undefined, true);
 
     const newList = this.getResource(resource, this.currentProjectId)?.filter(
       r => r.id != params.id
@@ -397,12 +403,13 @@ export class RoundwareDataProvider implements DataProvider {
   getOneJson = async (
     resource: string,
     id: Identifier,
-    filterQuery: FilterPayload = {}
+    filterQuery: FilterPayload = {},
+    revalidate = false,
   ) => {
     if (
-      this.getResource(resource, filterQuery.project_id)?.some(d => d.id == id)
+      !revalidate && this.getResource(resource)?.some(d => d.id == id)
     ) {
-      return this.getResource(resource, filterQuery.project_id)?.find(
+      return this.getResource(resource)?.find(
         d => d.id == id
       );
     }
@@ -419,6 +426,8 @@ export class RoundwareDataProvider implements DataProvider {
       )}`
     ).then((response: Response) => response.json);
 
+    if (revalidate) return results;
+    
     const resourceArray = this.getResource(resource, this.currentProjectId);
 
     if (!resourceArray?.length) {
