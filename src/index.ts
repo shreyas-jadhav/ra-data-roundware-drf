@@ -283,7 +283,9 @@ console.debug(`getList`)
       }),
     });
 
-    const newData = await this.getOneJson(resource, params.id, undefined, true);
+    const newData = await this.getOneJson(resource, params.id, {
+      admin: 1,
+    }, true);
 
     const newList = this.getResource(resource, this.currentProjectId)?.filter(
       r => r.id != params.id
