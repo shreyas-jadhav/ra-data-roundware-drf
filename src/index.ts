@@ -115,7 +115,9 @@ export class RoundwareDataProvider implements DataProvider {
     revalidate = false
   ): Promise<GetListResult<RecordType>> {
     const { project_id, session_id, ...filters } = params.filter;
-console.debug(`getList`)
+    console.debug(`getList`)
+
+    /** get url query */
     let query = {
       ...getFilterQuery({
         project_id: project_id || this.currentProjectId,
@@ -129,10 +131,13 @@ console.debug(`getList`)
       // ...(paginate && getPaginationQuery(params.pagination)),
     };
 
+    /** generate url */
     const url = `${this.apiUrl}/${resource}/?${stringify(query)}`;
 
+    /** data to be returned */
     let json: any[] = [];
     const that = this;
+    /** get resource from cached for that partifular project & sort by id */
     async function getFromCache() {
       json = [
         ...that.getResource(resource, params.filter.project_id)!,
@@ -140,23 +145,37 @@ console.debug(`getList`)
     }
 
     async function getFromNetwork() {
+
+    /** add to revalidaitng resources array
+     *  to avoid getting from network again if already happening
+     */
       that.revalidatingResources.push(resource);
       ({ json } = await that.httpClient(url));
       json = that.normalizeApiResponse(json);
+
+      /** save in cache */
       that.setResourse(resource, json, params.filter.project_id);
+
+      /** remove frmo revalidating resources */
       that.revalidatingResources = that.revalidatingResources.filter(
         r => r !== resource
       );
     }
 
+
+    /** if revalidate passed and not already revalidating */
     if (revalidate && !this.revalidatingResources.includes(resource)) {
       await getFromNetwork();
     } else if (
+      /** if available in cache */
       Boolean(this.getResource(resource, params.filter.project_id)?.length)
     ) {
       await getFromCache();
+      /** cache not available get from network */
     } else await getFromNetwork();
 
+
+    /** resources from cache not filtered, do filtering client side */
     if (Object.keys(filters).length > 0) {
       Object.keys(filters).forEach(filter => {
         const start_time_key =
@@ -189,9 +208,9 @@ console.debug(`getList`)
       });
     }
 
-    const total = json.length;
-    const { page, perPage } = params.pagination;
+    
 
+    /** do sorting client side, resources from cache can't be sorted */
     if (params?.sort?.field) {
       const { field, order } = params.sort;
       json = json.sort((a, b) => {
@@ -203,6 +222,12 @@ console.debug(`getList`)
         return -1;
       });
     }
+
+    /** do pagination client side, resources from cache can't be paginated */
+    const total = json.length;
+    const { page, perPage } = params.pagination;
+
+    /** if page 0 and perPage 0 then understand that client doesn't want pagination */
     if (page > 0 && perPage > 0) {
       const start = page * perPage - perPage;
       const end = start + perPage;
@@ -219,6 +244,7 @@ console.debug(`getList`)
     return Array.isArray(data) ? data : data.results;
   }
 
+  /** returns from cache if available else does new network req */
   async getOne<RecordType extends Record>(
     resource: string,
     { id, ...query }: GetOneParams
@@ -228,6 +254,9 @@ console.debug(`getList`)
       data,
     };
   }
+
+
+
   async getMany<RecordType extends Record>(
     resource: string,
     params: GetManyParams
@@ -237,6 +266,8 @@ console.debug(`getList`)
       params.ids.map(id => this.getOneJson(resource, id))
     ).then(data => ({ data }));
   }
+
+  
   async getManyReference<RecordType extends Record>(
     resource: string,
     params: GetManyReferenceParams,
@@ -258,6 +289,10 @@ console.debug(`getList`)
       total: paginate ? json.count : json?.length,
     };
   }
+
+
+
+  
   async update<RecordType extends Record>(
     resource: string,
     params: UpdateParams
@@ -265,13 +300,19 @@ console.debug(`getList`)
 
     console.debug(`update`, resource)
 
+    /** determine if any of the field has File type of data
+     *  in that case we need to send form-data req
+     */
     const needsFormData = Object.values(params?.data)?.some(
       v => v instanceof File || v instanceof Blob
     );
 
+    /** generate form data type of object */
     if (needsFormData) {
       params.data = this.getFormData(params.data);
     }
+
+    /** dynamiclly remove application/json header in case of formdata */
     await this.httpClient(`${this.apiUrl}/${resource}/${params.id}/`, {
       method: 'PATCH',
       body:
@@ -283,17 +324,23 @@ console.debug(`getList`)
       }),
     });
 
+    /** make new request for latest object */
     const newData = await this.getOneJson(resource, params.id, {
       admin: 1,
     }, true);
 
+    /** discard previous record from cache */
     const newList = this.getResource(resource, this.currentProjectId)?.filter(
       r => r.id != params.id
     );
+
+    /** push newly fetched record to cache */
     if (Array.isArray(newList)) {
       newList.push(newData);
       this.setResourse(resource, newList, this.currentProjectId);
-    } else {
+    } else  {
+
+      /** list not available yet then do a new req */
       this.getList(
         resource,
         {
@@ -312,6 +359,9 @@ console.debug(`getList`)
     }
     return { data: newData };
   }
+
+
+
   async updateMany(
     resource: string,
     params: UpdateManyParams
@@ -346,9 +396,21 @@ console.debug(`getList`)
       }),
     });
 
-    const resourseList = this.getResource(resource, this.currentProjectId);
-    if (Array.isArray(resourseList)) resourseList?.push(json);
-    else {
+    /** make new request for latest object with admin params */
+    const newData = await this.getOneJson(resource, json.id, {
+      admin: 1,
+    }, true);
+
+    
+    const cachedList = this.getResource(resource, this.currentProjectId);
+
+    /** push newly fetched record to cache */
+    if (Array.isArray(cachedList)) {
+      cachedList.push(newData);
+      this.setResourse(resource, cachedList, this.currentProjectId);
+    } else  {
+
+      /** list not available yet then do a new req */
       this.getList(
         resource,
         {
