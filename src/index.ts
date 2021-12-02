@@ -379,6 +379,7 @@ export class RoundwareDataProvider implements DataProvider {
     resource: string,
     params: CreateParams
   ): Promise<CreateResult<RecordType>> {
+    params.data.project_id = this.currentProjectId;
     const needsFormData = Object.values(params?.data)?.some(
       v => v instanceof File || v instanceof Blob
     );
