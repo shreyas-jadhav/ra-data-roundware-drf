@@ -201,6 +201,26 @@ export class RoundwareDataProvider implements DataProvider {
               d => new Date(d.created) < new Date(filters[filter])
             );
             break;
+            case `start__gte`:
+            json = json.filter(
+              d => d.start > filters[filter]
+            );
+            break;
+          case `start__lte`:
+            json = json.filter(
+              d => d.start < filters[filter]
+            );
+            break;
+          case `end__gte`:
+            json = json.filter(
+              d => d.end > filters[filter]
+            );
+            break;
+          case `end__lte`:
+            json = json.filter(
+              d => d.end < filters[filter]
+            );
+            break;
           default:
             json = json.filter(d => d[filter] == filters[filter]);
             break;
