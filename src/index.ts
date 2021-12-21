@@ -157,6 +157,7 @@ export class RoundwareDataProvider implements DataProvider {
       /** filter events by project_id client side */
       if (resource == 'events') { 
         const sessions = that.getResource('sessions');
+        console.log(`filtering events by session`)
         json = json.filter(e => sessions?.some(s => s.id == e.session_id));
       }
 
@@ -215,10 +216,12 @@ export class RoundwareDataProvider implements DataProvider {
             break;
             
           default:
-            if (filter.slice(-4) == '__gte') { 
-              json = json.filter(d => d[filter.slice(0,-4)] > filters[filter])
-            } if (filter.slice(-4) == '__lte') { 
-              json = json.filter(d => d[filter.slice(0,-4)] < filters[filter])
+            if (filter.slice(-5) == '__gte') { 
+              console.log('gte filter')
+              json = json.filter(d => d[filter.slice(0,-5)] >= filters[filter])
+            } if (filter.slice(-5) == '__lte') { 
+              console.log('lte filter')
+              json = json.filter(d => d[filter.slice(0,-5)] <= filters[filter])
             }  else 
             json = json.filter(d => d[filter] == filters[filter]);
             break;
