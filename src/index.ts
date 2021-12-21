@@ -514,6 +514,7 @@ export class RoundwareDataProvider implements DataProvider {
       filterQuery = {
         ...filterQuery,
         session_id: 1,
+        admin: 1
       };
 }
     let results = await this.httpClient(
