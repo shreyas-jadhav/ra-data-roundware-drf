@@ -196,39 +196,46 @@ export class RoundwareDataProvider implements DataProvider {
         switch (filter) {
           case `start_time__gte`:
             json = json.filter(
-              d => new Date(d[start_time_key]) > new Date(filters[filter])
+              d => new Date(d[start_time_key]) >= new Date(filters[filter])
             );
             break;
           case `start_time__lte`:
             json = json.filter(
-              d => new Date(d[start_time_key]) < new Date(filters[filter])
+              d => new Date(d[start_time_key]) <= new Date(filters[filter])
             );
             break;
           case `created__gte`:
             json = json.filter(
-              d => new Date(d.created) > new Date(filters[filter])
+              d => new Date(d.created) >= new Date(filters[filter])
             );
             break;
           case `created__lte`:
             json = json.filter(
-              d => new Date(d.created) < new Date(filters[filter])
+              d => new Date(d.created) <= new Date(filters[filter])
             );
             break;
             
           default:
-            if (filter.slice(-5) == '__gte') { 
-              console.log('gte filter')
-              json = json.filter(d => d[filter.slice(0,-5)] >= filters[filter])
-            } if (filter.slice(-5) == '__lte') { 
-              console.log('lte filter')
-              json = json.filter(d => d[filter.slice(0,-5)] <= filters[filter])
-            }  else 
-            json = json.filter(d => d[filter] == filters[filter]);
+            if (filter.slice(-5) == '__gte') {
+              
+              json = json.filter(d => {
+                const res = d[filter.slice(0, -5)] >= filters[filter]
+              
+                return res
+              })
+              console.log(`res`, json)
+            } else if (filter.slice(-5) == '__lte') {
+              
+              json = json.filter(d => d[filter.slice(0, -5)] <= filters[filter])
+            } else if (filters[filter]) { 
+              json = json.filter(d => d[filter] == filters[filter]);
+              }
             break;
         }
       });
     }
 
+    
     
 
     /** do sorting client side, resources from cache can't be sorted */
@@ -248,6 +255,8 @@ export class RoundwareDataProvider implements DataProvider {
     const total = json.length;
     const { page, perPage } = params.pagination;
 
+    
+
     /** if page 0 and perPage 0 then understand that client doesn't want pagination */
     if (page > 0 && perPage > 0) {
       const start = page * perPage - perPage;
@@ -255,6 +264,7 @@ export class RoundwareDataProvider implements DataProvider {
       json = json.slice(start, end);
     }
 
+    console.log(json)
     return {
       data: json,
       total: total,
