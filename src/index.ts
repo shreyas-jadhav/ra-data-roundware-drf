@@ -153,6 +153,13 @@ export class RoundwareDataProvider implements DataProvider {
       ({ json } = await that.httpClient(url));
       json = that.normalizeApiResponse(json);
 
+
+      /** filter events by project_id client side */
+      if (resource == 'events') { 
+        const sessions = that.getResource('sessions');
+        json = json.filter(e => sessions?.some(s => s.id == e.session_id));
+      }
+
       /** save in cache */
       that.setResourse(resource, json, params.filter.project_id);
 
@@ -163,6 +170,8 @@ export class RoundwareDataProvider implements DataProvider {
     }
 
 
+    
+
     /** if revalidate passed and not already revalidating */
     if (revalidate && !this.revalidatingResources.includes(resource)) {
       await getFromNetwork();
@@ -172,7 +181,10 @@ export class RoundwareDataProvider implements DataProvider {
     ) {
       await getFromCache();
       /** cache not available get from network */
-    } else await getFromNetwork();
+    } else {
+      await getFromNetwork();
+      
+    }
 
 
     /** resources from cache not filtered, do filtering client side */
@@ -204,9 +216,9 @@ export class RoundwareDataProvider implements DataProvider {
             
           default:
             if (filter.slice(-4) == '__gte') { 
-              json = json.filter(d => d[filter.slice(0,-3)] > filters[filter])
+              json = json.filter(d => d[filter.slice(0,-4)] > filters[filter])
             } if (filter.slice(-4) == '__lte') { 
-              json = json.filter(d => d[filter.slice(0,-3)] < filters[filter])
+              json = json.filter(d => d[filter.slice(0,-4)] < filters[filter])
             }  else 
             json = json.filter(d => d[filter] == filters[filter]);
             break;
