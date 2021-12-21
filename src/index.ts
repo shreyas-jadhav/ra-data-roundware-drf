@@ -216,9 +216,9 @@ export class RoundwareDataProvider implements DataProvider {
             
           default:
             if (filter.slice(-4) == '__gte') { 
-              json = json.filter(d => d[filter.slice(0,-4)] > filters[filter])
+              json = json.filter(d => d[filter.slice(-4)] > filters[filter])
             } if (filter.slice(-4) == '__lte') { 
-              json = json.filter(d => d[filter.slice(0,-4)] < filters[filter])
+              json = json.filter(d => d[filter.slice(-4)] < filters[filter])
             }  else 
             json = json.filter(d => d[filter] == filters[filter]);
             break;
