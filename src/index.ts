@@ -502,6 +502,9 @@ export class RoundwareDataProvider implements DataProvider {
     filterQuery: FilterPayload = {},
     revalidate = false,
   ) => {
+    if ([`projects`].includes(resource)) { 
+      revalidate = true;
+    }
     if (
       !revalidate && this.getResource(resource)?.some(d => d.id == id)
     ) {
