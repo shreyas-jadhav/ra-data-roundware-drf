@@ -146,16 +146,16 @@ export class RoundwareDataProvider implements DataProvider {
 
     async function getFromNetwork() {
 
-    /** add to revalidaitng resources array
-     *  to avoid getting from network again if already happening
-     */
+      /** add to revalidaitng resources array
+       *  to avoid getting from network again if already happening
+       */
       that.revalidatingResources.push(resource);
       ({ json } = await that.httpClient(url));
       json = that.normalizeApiResponse(json);
 
 
       /** filter events by project_id client side */
-      if (resource == 'events') { 
+      if (resource == 'events') {
         const sessions = that.getResource('sessions');
         console.log(`filtering events by session`)
         json = json.filter(e => sessions?.some(s => s.id == e.session_id));
@@ -171,7 +171,7 @@ export class RoundwareDataProvider implements DataProvider {
     }
 
 
-    
+
 
     /** if revalidate passed and not already revalidating */
     if (revalidate && !this.revalidatingResources.includes(resource)) {
@@ -184,7 +184,7 @@ export class RoundwareDataProvider implements DataProvider {
       /** cache not available get from network */
     } else {
       await getFromNetwork();
-      
+
     }
 
 
@@ -214,29 +214,33 @@ export class RoundwareDataProvider implements DataProvider {
               d => new Date(d.created) <= new Date(filters[filter])
             );
             break;
-            
+          case `tag_ids`:
+            console.log(filters[filter])
+            json = json.filter(
+              d => filters[filter].every((t: number) => d.tag_ids.includes(t))
+            );
+            break;
           default:
             if (filter.slice(-5) == '__gte') {
-              
+
               json = json.filter(d => {
                 const res = d[filter.slice(0, -5)] >= filters[filter]
-              
+
                 return res
               })
               console.log(`res`, json)
             } else if (filter.slice(-5) == '__lte') {
-              
               json = json.filter(d => d[filter.slice(0, -5)] <= filters[filter])
-            } else if (filters[filter]) { 
+            } else {
               json = json.filter(d => d[filter] == filters[filter]);
-              }
+            }
             break;
         }
       });
     }
 
-    
-    
+
+
 
     /** do sorting client side, resources from cache can't be sorted */
     if (params?.sort?.field) {
@@ -255,7 +259,7 @@ export class RoundwareDataProvider implements DataProvider {
     const total = json.length;
     const { page, perPage } = params.pagination;
 
-    
+
 
     /** if page 0 and perPage 0 then understand that client doesn't want pagination */
     if (page > 0 && perPage > 0) {
@@ -298,7 +302,7 @@ export class RoundwareDataProvider implements DataProvider {
     ).then(data => ({ data }));
   }
 
-  
+
   async getManyReference<RecordType extends Record>(
     resource: string,
     params: GetManyReferenceParams,
@@ -323,7 +327,7 @@ export class RoundwareDataProvider implements DataProvider {
 
 
 
-  
+
   async update<RecordType extends Record>(
     resource: string,
     params: UpdateParams
@@ -369,7 +373,7 @@ export class RoundwareDataProvider implements DataProvider {
     if (Array.isArray(newList)) {
       newList.push(newData);
       this.setResourse(resource, newList, this.currentProjectId);
-    } else  {
+    } else {
 
       /** list not available yet then do a new req */
       this.getList(
@@ -433,14 +437,14 @@ export class RoundwareDataProvider implements DataProvider {
       admin: 1,
     }, true);
 
-    
+
     const cachedList = this.getResource(resource, this.currentProjectId);
 
     /** push newly fetched record to cache */
     if (Array.isArray(cachedList)) {
       cachedList.push(newData);
       this.setResourse(resource, cachedList, this.currentProjectId);
-    } else  {
+    } else {
 
       /** list not available yet then do a new req */
       this.getList(
@@ -502,7 +506,7 @@ export class RoundwareDataProvider implements DataProvider {
     filterQuery: FilterPayload = {},
     revalidate = false,
   ) => {
-    if ([`projects`].includes(resource)) { 
+    if ([`projects`].includes(resource)) {
       revalidate = true;
     }
     if (
@@ -519,7 +523,7 @@ export class RoundwareDataProvider implements DataProvider {
         session_id: 1,
         admin: 1
       };
-}
+    }
     let results = await this.httpClient(
       `${this.apiUrl}/${resource}/${id}/?${stringify(
         getFilterQuery(filterQuery)
@@ -527,7 +531,7 @@ export class RoundwareDataProvider implements DataProvider {
     ).then((response: Response) => response.json);
 
     if (revalidate) return results;
-    
+
     const resourceArray = this.getResource(resource, this.currentProjectId);
 
     if (!resourceArray?.length) {
@@ -591,7 +595,7 @@ export class RoundwareDataProvider implements DataProvider {
     function ignore(root: string) {
       return (
         Array.isArray(ignoreList) &&
-        ignoreList.some(function(x) {
+        ignoreList.some(function (x) {
           return x === root;
         })
       );
