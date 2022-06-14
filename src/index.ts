@@ -24,8 +24,9 @@ import {
   SortPayload,
   PaginationPayload,
   GetListParams,
-  Record,
+  RaRecord,
 } from 'ra-core';
+import { XMLHttpRequestWithAuthToken } from './tokenAuthProvider';
 
 export {
   default as tokenAuthProvider,
@@ -81,7 +82,6 @@ export class RoundwareDataProvider implements DataProvider {
     this.apiUrl = apiUrl;
     this.httpClient = httpClient;
     this.paginateAllByDefault = paginateAllByDefault;
-    console.debug(`Data Provider created`)
   }
 
   getResource(
@@ -99,6 +99,8 @@ export class RoundwareDataProvider implements DataProvider {
     data: any[],
     projectId: number = this.currentProjectId
   ) {
+    // don't cache projects
+    if ([`projects`].includes(resource)) return;
     let resources = this.cachedProjectData.get(projectId);
     if (!resources) resources = new Map<string, any[]>();
     resources.set(resource, data);
@@ -108,14 +110,14 @@ export class RoundwareDataProvider implements DataProvider {
   /**
    *
    */
-  async getList<RecordType extends Record = Record>(
+  async getList<RecordType extends RaRecord = RaRecord>(
     resource: string,
     params: GetListParams,
     /** revalidates cache */
     revalidate = false
   ): Promise<GetListResult<RecordType>> {
     const { project_id, session_id, ...filters } = params.filter;
-    console.debug(`getList`)
+    console.debug(`getList`);
 
     /** get url query */
     let query = {
@@ -139,13 +141,12 @@ export class RoundwareDataProvider implements DataProvider {
     const that = this;
     /** get resource from cached for that partifular project & sort by id */
     async function getFromCache() {
-      json = [
-        ...that.getResource(resource, params.filter.project_id)!,
-      ].sort((a, b) => (a.id > b.id ? 1 : -1));
+      json = [...that.getResource(resource, params.filter.project_id)!].sort(
+        (a, b) => (a.id > b.id ? 1 : -1)
+      );
     }
 
     async function getFromNetwork() {
-
       /** add to revalidaitng resources array
        *  to avoid getting from network again if already happening
        */
@@ -153,12 +154,11 @@ export class RoundwareDataProvider implements DataProvider {
       ({ json } = await that.httpClient(url));
       json = that.normalizeApiResponse(json);
 
-
       /** filter events by project_id client side */
       if (resource == 'events') {
         const sessions = that.getResource('sessions');
-        console.log(`filtering events by session`)
-        json = json.filter(e => sessions?.some(s => s.id == e.session_id));
+        console.debug(`filtering events by session`);
+        json = json.filter((e) => sessions?.some((s) => s.id == e.session_id));
       }
 
       /** save in cache */
@@ -166,12 +166,9 @@ export class RoundwareDataProvider implements DataProvider {
 
       /** remove frmo revalidating resources */
       that.revalidatingResources = that.revalidatingResources.filter(
-        r => r !== resource
+        (r) => r !== resource
       );
     }
-
-
-
 
     /** if revalidate passed and not already revalidating */
     if (revalidate && !this.revalidatingResources.includes(resource)) {
@@ -184,63 +181,59 @@ export class RoundwareDataProvider implements DataProvider {
       /** cache not available get from network */
     } else {
       await getFromNetwork();
-
     }
-
 
     /** resources from cache not filtered, do filtering client side */
     if (Object.keys(filters).length > 0) {
-      Object.keys(filters).forEach(filter => {
+      Object.keys(filters).forEach((filter) => {
         const start_time_key =
           resource == `sessions` ? `starttime` : `start_time`;
         switch (filter) {
           case `start_time__gte`:
             json = json.filter(
-              d => new Date(d[start_time_key]) >= new Date(filters[filter])
+              (d) => new Date(d[start_time_key]) >= new Date(filters[filter])
             );
             break;
           case `start_time__lte`:
             json = json.filter(
-              d => new Date(d[start_time_key]) <= new Date(filters[filter])
+              (d) => new Date(d[start_time_key]) <= new Date(filters[filter])
             );
             break;
           case `created__gte`:
             json = json.filter(
-              d => new Date(d.created) >= new Date(filters[filter])
+              (d) => new Date(d.created) >= new Date(filters[filter])
             );
             break;
           case `created__lte`:
             json = json.filter(
-              d => new Date(d.created) <= new Date(filters[filter])
+              (d) => new Date(d.created) <= new Date(filters[filter])
             );
             break;
           case `tag_ids`:
-            console.log(filters[filter])
-            json = json.filter(
-              d => filters[filter].every((t: number) => d.tag_ids.includes(t))
+            console.debug(filters[filter]);
+            json = json.filter((d) =>
+              filters[filter].every((t: number) => d.tag_ids.includes(t))
             );
             break;
           default:
             if (filter.slice(-5) == '__gte') {
+              json = json.filter((d) => {
+                const res = d[filter.slice(0, -5)] >= filters[filter];
 
-              json = json.filter(d => {
-                const res = d[filter.slice(0, -5)] >= filters[filter]
-
-                return res
-              })
-              console.log(`res`, json)
+                return res;
+              });
+              console.debug(`res`, json);
             } else if (filter.slice(-5) == '__lte') {
-              json = json.filter(d => d[filter.slice(0, -5)] <= filters[filter])
+              json = json.filter(
+                (d) => d[filter.slice(0, -5)] <= filters[filter]
+              );
             } else {
-              json = json.filter(d => d[filter] == filters[filter]);
+              json = json.filter((d) => d[filter] == filters[filter]);
             }
             break;
         }
       });
     }
-
-
-
 
     /** do sorting client side, resources from cache can't be sorted */
     if (params?.sort?.field) {
@@ -259,8 +252,6 @@ export class RoundwareDataProvider implements DataProvider {
     const total = json.length;
     const { page, perPage } = params.pagination;
 
-
-
     /** if page 0 and perPage 0 then understand that client doesn't want pagination */
     if (page > 0 && perPage > 0) {
       const start = page * perPage - perPage;
@@ -268,7 +259,7 @@ export class RoundwareDataProvider implements DataProvider {
       json = json.slice(start, end);
     }
 
-    console.log(json)
+    console.debug(`Response`, json);
     return {
       data: json,
       total: total,
@@ -280,7 +271,7 @@ export class RoundwareDataProvider implements DataProvider {
   }
 
   /** returns from cache if available else does new network req */
-  async getOne<RecordType extends Record>(
+  async getOne<RecordType extends RaRecord>(
     resource: string,
     { id, ...query }: GetOneParams
   ): Promise<GetOneResult<RecordType>> {
@@ -290,25 +281,22 @@ export class RoundwareDataProvider implements DataProvider {
     };
   }
 
-
-
-  async getMany<RecordType extends Record>(
+  async getMany<RecordType extends RaRecord>(
     resource: string,
     params: GetManyParams
   ): Promise<GetManyResult<RecordType>> {
-    console.debug(`getMany`, resource)
+    console.debug(`getMany`, resource);
     return Promise.all(
-      params.ids.map(id => this.getOneJson(resource, id))
-    ).then(data => ({ data }));
+      params.ids.map((id) => this.getOneJson(resource, id))
+    ).then((data) => ({ data }));
   }
 
-
-  async getManyReference<RecordType extends Record>(
+  async getManyReference<RecordType extends RaRecord>(
     resource: string,
     params: GetManyReferenceParams,
     paginate: boolean = false
   ): Promise<GetManyReferenceResult<RecordType>> {
-    console.debug(`getManyReferene`, resource)
+    console.debug(`getManyReferene`, resource);
     let query = {
       ...getFilterQuery(params.filter),
       ...(paginate && getPaginationQuery(params.pagination)),
@@ -325,21 +313,17 @@ export class RoundwareDataProvider implements DataProvider {
     };
   }
 
-
-
-
-  async update<RecordType extends Record>(
+  async update<RecordType extends RaRecord>(
     resource: string,
     params: UpdateParams
   ): Promise<UpdateResult<RecordType>> {
-
-    console.debug(`update`, resource)
+    console.debug(`update`, resource);
 
     /** determine if any of the field has File type of data
      *  in that case we need to send form-data req
      */
     const needsFormData = Object.values(params?.data)?.some(
-      v => v instanceof File || v instanceof Blob
+      (v) => v instanceof File || v instanceof Blob
     );
 
     /** generate form data type of object */
@@ -347,26 +331,38 @@ export class RoundwareDataProvider implements DataProvider {
       params.data = this.getFormData(params.data);
     }
 
+    const client = needsFormData
+      ? XMLHttpRequestWithAuthToken
+      : this.httpClient;
     /** dynamiclly remove application/json header in case of formdata */
-    await this.httpClient(`${this.apiUrl}/${resource}/${params.id}/`, {
-      method: 'PATCH',
-      body:
-        params.data instanceof FormData
-          ? params.data
-          : JSON.stringify(params.data),
-      ...(needsFormData && {
-        headers: new Headers({}),
-      }),
-    });
+    await client(
+      `${this.apiUrl}/${resource}/${params.id}/`,
+      {
+        method: 'PATCH',
+        body:
+          params.data instanceof FormData
+            ? params.data
+            : JSON.stringify(params.data),
+        ...(needsFormData && {
+          headers: new Headers({}),
+        }),
+      },
+      params?.meta?.onProgress
+    );
 
     /** make new request for latest object */
-    const newData = await this.getOneJson(resource, params.id, {
-      admin: 1,
-    }, true);
+    const newData = await this.getOneJson(
+      resource,
+      params.id,
+      {
+        admin: 1,
+      },
+      true
+    );
 
     /** discard previous record from cache */
     const newList = this.getResource(resource, this.currentProjectId)?.filter(
-      r => r.id != params.id
+      (r) => r.id != params.id
     );
 
     /** push newly fetched record to cache */
@@ -374,7 +370,6 @@ export class RoundwareDataProvider implements DataProvider {
       newList.push(newData);
       this.setResourse(resource, newList, this.currentProjectId);
     } else {
-
       /** list not available yet then do a new req */
       this.getList(
         resource,
@@ -395,48 +390,59 @@ export class RoundwareDataProvider implements DataProvider {
     return { data: newData };
   }
 
-
-
   async updateMany(
     resource: string,
     params: UpdateManyParams
   ): Promise<UpdateManyResult> {
     return Promise.all(
-      params.ids.map(id =>
+      params.ids.map((id) =>
         this.httpClient(`${this.apiUrl}/${resource}/${id}/`, {
           method: 'PATCH',
           body: JSON.stringify(params.data),
         })
       )
-    ).then(responses => ({ data: responses.map(({ json }) => json.id) }));
+    ).then((responses) => ({
+      data: responses.map(({ json }) => json.id),
+    }));
   }
-  async create<RecordType extends Record>(
+  async create<RecordType extends RaRecord>(
     resource: string,
     params: CreateParams
   ): Promise<CreateResult<RecordType>> {
     params.data.project_id = this.currentProjectId;
     const needsFormData = Object.values(params?.data)?.some(
-      v => v instanceof File || v instanceof Blob
+      (v) => v instanceof File || v instanceof Blob
     );
     if (needsFormData) {
       params.data = this.getFormData(params.data);
     }
-    const { json } = await this.httpClient(`${this.apiUrl}/${resource}/`, {
-      method: 'POST',
-      body:
-        params.data instanceof FormData
-          ? params.data
-          : JSON.stringify(params.data),
-      ...(needsFormData && {
-        headers: new Headers({}),
-      }),
-    });
+    const client = needsFormData
+      ? XMLHttpRequestWithAuthToken
+      : this.httpClient;
+    const { json } = await client(
+      `${this.apiUrl}/${resource}/`,
+      {
+        method: 'POST',
+        body:
+          params.data instanceof FormData
+            ? params.data
+            : JSON.stringify(params.data),
+        ...(needsFormData && {
+          headers: new Headers({}),
+        }),
+      },
+      params?.meta?.onProgress
+    );
 
     /** make new request for latest object with admin params */
-    const newData = await this.getOneJson(resource, json.id, {
-      admin: 1,
-    }, true);
-
+    const newData = await this.getOneJson(
+      resource,
+      json.id,
+      {
+        admin: 1,
+      },
+      true
+    );
 
     const cachedList = this.getResource(resource, this.currentProjectId);
 
@@ -445,7 +451,6 @@ export class RoundwareDataProvider implements DataProvider {
       cachedList.push(newData);
       this.setResourse(resource, cachedList, this.currentProjectId);
     } else {
-
       /** list not available yet then do a new req */
       this.getList(
         resource,
@@ -467,7 +472,7 @@ export class RoundwareDataProvider implements DataProvider {
       data: { ...json },
     };
   }
-  async delete<RecordType extends Record>(
+  async delete<RecordType extends RaRecord>(
     resource: string,
     params: DeleteParams
   ): Promise<DeleteResult<RecordType>> {
@@ -475,7 +480,7 @@ export class RoundwareDataProvider implements DataProvider {
       method: 'DELETE',
     }).then(() => {
       let list = this.getResource(resource, this.currentProjectId);
-      list = list?.filter(r => r.id != params.id);
+      list = list?.filter((r) => r.id != params.id);
       this.setResourse(resource, list || [], this.currentProjectId);
       return { data: params.previousData };
     });
@@ -485,15 +490,15 @@ export class RoundwareDataProvider implements DataProvider {
     params: DeleteManyParams
   ): Promise<DeleteManyResult> {
     return Promise.all(
-      params.ids.map(id =>
+      params.ids.map((id) =>
         this.httpClient(`${this.apiUrl}/${resource}/${id}/`, {
           method: 'DELETE',
         })
       )
-    ).then(responses => {
+    ).then((responses) => {
       let list = this.getResource(resource);
       if (Array.isArray(list)) {
-        list = list?.filter(r => params.ids.includes(r.id));
+        list = list?.filter((r) => params.ids.includes(r.id));
         this.setResourse(resource, list || [], this.currentProjectId);
       }
       return { data: responses.map(({ json }) => json.id) };
@@ -504,24 +509,20 @@ export class RoundwareDataProvider implements DataProvider {
     resource: string,
     id: Identifier,
     filterQuery: FilterPayload = {},
-    revalidate = false,
+    revalidate = false
   ) => {
     if ([`projects`].includes(resource)) {
       revalidate = true;
     }
-    if (
-      !revalidate && this.getResource(resource)?.some(d => d.id == id)
-    ) {
-      return this.getResource(resource)?.find(
-        d => d.id == id
-      );
+    if (!revalidate && this.getResource(resource)?.some((d) => d.id == id)) {
+      return this.getResource(resource)?.find((d) => d.id == id);
     }
     // resources which require session_id
     if ([`projects`].includes(resource)) {
       filterQuery = {
         ...filterQuery,
         session_id: 1,
-        admin: 1
+        admin: 1,
       };
     }
     let results = await this.httpClient(
@@ -543,12 +544,10 @@ export class RoundwareDataProvider implements DataProvider {
         },
         sort: {
           field: 'id',
-          order: "ASC"
-        }
-      })
-    } else if (
-      !resourceArray.some(r => r.id == results.id)
-    ) {
+          order: 'ASC',
+        },
+      });
+    } else if (!resourceArray.some((r) => r.id == results.id)) {
       resourceArray.push(results);
       resourceArray.sort((a, b) => (a.id > b.id ? 1 : -1));
     }

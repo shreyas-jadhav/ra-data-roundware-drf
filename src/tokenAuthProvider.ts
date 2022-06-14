@@ -1,8 +1,4 @@
-import { AuthProvider, fetchUtils } from 'ra-core';
-
-export interface Options {
-  obtainAuthTokenUrl?: string;
-}
+import { AuthProvider, fetchUtils, Options } from 'ra-core';
 
 function tokenAuthProvider(options: Options = {}): AuthProvider {
   const opts = {
@@ -35,7 +31,7 @@ function tokenAuthProvider(options: Options = {}): AuthProvider {
     },
     checkAuth: () =>
       localStorage.getItem('token') ? Promise.resolve() : Promise.reject(),
-    checkError: error => {
+    checkError: (error) => {
       const status = error.status;
       if (status === 401 || status === 403) {
         localStorage.removeItem('token');
@@ -67,6 +63,40 @@ export function fetchJsonWithAuthToken(url: string, options: object) {
     url,
     Object.assign(createOptionsFromToken(), options)
   );
+}
+
+export function XMLHttpRequestWithAuthToken(
+  uri: string,
+  options: Options,
+  onprogress:
+    | ((this: XMLHttpRequest, ev: ProgressEvent<EventTarget>) => any)
+    | null
+) {
+  options = { ...options, ...createOptionsFromToken() };
+  return new Promise((resolve) => {
+    const request = new XMLHttpRequest();
+    request.open(options.method || 'GET', uri);
+    Object.keys(options.headers || {}).forEach((h) =>
+      request.setRequestHeader(
+        h,
+        // @ts-ignore
+        options.headers?.[h]
+      )
+    );
+
+    if (options.user?.authenticated) {
+      request.setRequestHeader(`Authorization`, options.user.token!);
+    }
+
+    request.onload = () => {
+      resolve({
+        json: JSON.parse(request.response),
+      });
+    };
+
+    if (onprogress) request.upload.onprogress = onprogress;
+    request.send(options.body as FormData);
+  });
 }
 
 export default tokenAuthProvider;

@@ -2,21 +2,16 @@
   "version": "0.1.6",
   "license": "MIT",
   "main": "dist/index.js",
-  "typings": "dist/index.d.ts",
+  "types": "dist/index.d.ts",
   "files": [
-    "dist",
-    "src"
+    "dist"
   ],
   "engines": {
     "node": ">=10"
   },
   "scripts": {
-    "start": "tsdx watch",
-    "build": "tsdx build",
-    "test": "tsdx test",
-    "lint": "tsdx lint",
-    "prepare": "tsdx build",
-    "release": "standard-version -a"
+    "start": "tsc --watch",
+    "build": "tsc"
   },
   "keywords": [
     "react-admin",
@@ -34,27 +29,20 @@
   "name": "ra-data-roundware-drf",
   "author": "Bojan Mihelac",
   "module": "dist/index.js",
-  "devDependencies": {
-    "cross-fetch": "^3.0.5",
-    "fetch-mock-jest": "^1.3.0",
-    "husky": "^4.2.5",
-    "react": "^16.9.0",
-    "react-admin": "^3.18.3",
-    "react-dom": "^16.9.0",
-    "standard-version": "^9.3.1",
-    "tsdx": "^0.14.1",
-    "tslib": "^2.3.1",
-    "typescript": "^4.4.4"
-  },
   "peerDependencies": {
-    "ra-core": "^3.18.3"
+    "ra-core": "^4.1.3"
   },
   "dependencies": {
     "query-string": "^7.0.1",
-    "ra-data-roundware-drf": "https://github.com/shreyas-jadhav/ra-data-roundware-drf/raw/main/ra-data-roundware-drf-0.1.6.tgz"
+    "typescript": "^4.7.3"
   },
   "bugs": {
     "url": "https://github.com/bmihelac/ra-data-django-rest-framework/issues"
   },
-  "homepage": "https://github.com/bmihelac/ra-data-django-rest-framework"
+  "homepage": "https://github.com/bmihelac/ra-data-django-rest-framework",
+  "devDependencies": {
+    "@types/lodash": "^4.14.182",
+    "@types/react": "^18.0.12",
+    "tslib": "^2.4.0"
+  }
 }
