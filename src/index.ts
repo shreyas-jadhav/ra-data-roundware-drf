@@ -125,9 +125,8 @@ export class RoundwareDataProvider implements DataProvider {
         project_id: project_id || this.currentProjectId,
         session_id,
         admin: 1,
-        ...(filters.start_time__gte && {
-          start_time__gte: filters.start_time__gte,
-        }),
+        // other filters;
+        ...filters,
       }),
       ...getOrderingQuery(params.sort),
       // ...(paginate && getPaginationQuery(params.pagination)),
@@ -139,8 +138,9 @@ export class RoundwareDataProvider implements DataProvider {
     /** data to be returned */
     let json: any[] = [];
     const that = this;
+
     /** get resource from cached for that partifular project & sort by id */
-    async function getFromCache() {
+    function getFromCache() {
       json = [...that.getResource(resource, params.filter.project_id)!].sort(
         (a, b) => (a.id > b.id ? 1 : -1)
       );
@@ -151,6 +151,7 @@ export class RoundwareDataProvider implements DataProvider {
        *  to avoid getting from network again if already happening
        */
       that.revalidatingResources.push(resource);
+      /** get with query params for now to send response quickly, but we will fetch again without any filters  after this */
       ({ json } = await that.httpClient(url));
       json = that.normalizeApiResponse(json);
 
@@ -168,6 +169,27 @@ export class RoundwareDataProvider implements DataProvider {
       that.revalidatingResources = that.revalidatingResources.filter(
         (r) => r !== resource
       );
+      // above code we might have fetched with filter;
+      // below code we fetch without filter and save it;
+      // should happen async
+      if (Object.values(params.filter).length > 0) {
+        // get without filter
+        const newQuery = {
+          ...getFilterQuery({
+            project_id: params.filter.project_id || that.currentProjectId,
+            session_id: params.filter.session_id,
+            admin: 1,
+            // not other filters;
+          }),
+        };
+        const newUrl = `${that.apiUrl}/${resource}/?${stringify(newQuery)}`;
+
+        that.httpClient(newUrl).then(({ json: newJson }: { json: any[] }) => {
+          const normalizedJson = that.normalizeApiResponse(newJson);
+          // save in cache
+          that.setResourse(resource, normalizedJson, params.filter.project_id);
+        });
+      }
     }
 
     /** if revalidate passed and not already revalidating */
@@ -177,7 +199,7 @@ export class RoundwareDataProvider implements DataProvider {
       /** if available in cache */
       Boolean(this.getResource(resource, params.filter.project_id)?.length)
     ) {
-      await getFromCache();
+      getFromCache();
       /** cache not available get from network */
     } else {
       await getFromNetwork();
@@ -259,7 +281,6 @@ export class RoundwareDataProvider implements DataProvider {
       json = json.slice(start, end);
     }
 
-    console.debug(`Response`, json);
     return {
       data: json,
       total: total,
